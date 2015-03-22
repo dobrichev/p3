@@ -101,8 +101,9 @@ int main(int argc, char* argv[])
 		for(int i1 = 0; i1 < n - 2; i1++) {
 			int p1 = e[i1];
 			for(char v1 = 1; v1 <= 9; v1++) {
-				c.chars[p1] = v1;
 				if(invalid[i1][(int)v1]) continue;
+				c.chars[p1] = v1;
+				//if(!s.isIrreducible(c.chars)) continue;
 				//if(0 == s.solve(c.chars, 1, NULL)) continue;
 				for(int i2 = i1 + 1; i2 < n - 1; i2++) {
 					int p2 = e[i2];
@@ -110,6 +111,7 @@ int main(int argc, char* argv[])
 						if(invalid[i2][(int)v2]) continue;
 						c.chars[p2] = v2;
 						if(0 == s.solve(c.chars, 1, NULL)) continue;
+						//if(!s.isIrreducible(c.chars)) continue;
 						for(int i3 = i2 + 1; i3 < n; i3++) {
 							int p3 = e[i3];
 							for(char v3 = 1; v3 <= 9; v3++) {
@@ -124,7 +126,10 @@ int main(int argc, char* argv[])
 #ifdef _OPENMP
 #pragma omp critical (out)
 #endif //_OPENMP
-								printf("%81.81s\n", res);
+								{
+									printf("%81.81s\n", res);
+									fflush(stdout);
+								}
 							}
 							c.chars[p3] = 0;
 						}

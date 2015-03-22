@@ -11,11 +11,21 @@
 
 #define T_128_H_INCLUDED
 
-#include <immintrin.h>
+#ifdef   _MSC_VER
+	#include <intrin.h>
+#else
+	#include <immintrin.h>
+#endif
 #include <limits.h>
 
-//#define _popcnt64(a) _mm_popcnt_u64(a)
-#define _popcnt64(a) __builtin_popcountll(a)
+#ifdef   _MSC_VER
+	#define _popcnt64(a) __popcnt64(a)
+	//#define _popcnt32(a) __popcnt32(a)
+#else
+	//#define _popcnt64(a) _mm_popcnt_u64(a)
+	#define _popcnt64(a) __builtin_popcountll(a)
+	//#define _popcnt32(a) __builtin_popcount(a)
+#endif
 
 #ifndef _MSC_VER
 	//assume every compiler but MS is C99 compliant and has inttypes
@@ -63,7 +73,7 @@ struct bm128 {
 	//inline int toInt32() const {return _mm_cvtsi128_si32(bitmap128.m128i_m128i);}
 	inline uint64_t toInt64() const {return _mm_cvtsi128_si64(bitmap128.m128i_m128i);}
 	inline uint64_t toInt64_1() const {return _mm_extract_epi64(bitmap128.m128i_m128i, 1);}
-	inline int toInt32_2() const {return _mm_extract_epi32(bitmap128.m128i_m128i, 2);}
+	inline uint32_t toInt32_2() const {return _mm_extract_epi32(bitmap128.m128i_m128i, 2);}
 	//inline int toInt32_2() const {return _mm_cvtsi128_si32(_mm_srli_si128(bitmap128.m128i_m128i, 8));}
 	inline bool isBitSet(const int theBit) const {return !_mm_testz_si128(this->bitmap128.m128i_m128i, bitSet[theBit].m128i_m128i);};
 	inline void setBit(const int theBit) {*this |= bitSet[theBit].m128i_m128i;};
@@ -99,7 +109,11 @@ struct bm128 {
 			xmm.bitmap128.m128i_m128i = _mm_srli_si128(bitmap128.m128i_m128i, 8);
 			uint32_t i = _mm_cvtsi128_si32(xmm.bitmap128.m128i_m128i);
 			if(i) {
+#ifdef   _MSC_VER
+				return 64 + FindLSBIndex32(i);
+#else
 				return 64 + __builtin_ctz(i);
+#endif
 			}
 		}
 		return -1;
@@ -110,7 +124,12 @@ struct bm128 {
 //		return _mm_testz_si128(bitmap128.m128i_m128i, _mm_add_epi64(bitmap128.m128i_m128i, minus1.m128i_m128i));
 //	}
     inline static uint64_t FindLSBIndex64(const uint64_t Mask) {
-    	uint64_t Ret;
+#ifdef   _MSC_VER
+        unsigned long res;
+        _BitScanForward64(&res, Mask);
+        return res;
+#else
+       uint64_t Ret;
         __asm__
         (
             "bsfq %[Mask], %[Ret]"
@@ -118,10 +137,17 @@ struct bm128 {
             :[Mask] "mr" (Mask)
         );
         return Ret;
-        //return __builtin_ctzll(Mask);
+        //return __builtin_ctzll(Mask); //some g++ versions split this to two 32-bit operations that work slower
+#endif
     }
     inline static unsigned int FindLSBIndex32(const uint32_t Mask) {
+#ifdef   _MSC_VER
+        unsigned long res;
+        _BitScanForward(&res, Mask);
+        return res;
+#else
         return __builtin_ctz(Mask);
+#endif
     }
 };
 

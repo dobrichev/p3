@@ -318,15 +318,15 @@ const tripletMask fsss2::tripletMasks[54] = {
 
 bool fsss2::isIrreducible(const char* const in) {
 	int pos[81], val[81], nGivens = 0;
-	int dc[9] = {0,0,0,0,0,0,0,0,0};
-	for(int c = 0; c < 81; c++) {
-		if(in[c] == 0)
-			continue;
-		pos[nGivens] = c;
-		val[nGivens++] = in[c] - 1;
-		if(++dc[in[c] - 1] > 6)
-			return false; //this works for 36+ givens
-	}
+//	int dc[9] = {0,0,0,0,0,0,0,0,0};
+//	for(int c = 0; c < 81; c++) {
+//		if(in[c] == 0)
+//			continue;
+//		pos[nGivens] = c;
+//		val[nGivens++] = in[c] - 1;
+//		if(++dc[in[c] - 1] > 6)
+//			return false; //this works for 36+ givens
+//	}
 	sol = NULL;
 	for(int skip = 0; skip < nGivens; skip++) {
 	//for(int skip = nGivens - 1; skip >= 0; skip--) { //slower
