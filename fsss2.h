@@ -14,6 +14,7 @@
 #include "t_128.h"
 
 //#define USE_LOCKED_CANDIDATES
+//#define USE_SUBSETS
 
 #ifdef USE_LOCKED_CANDIDATES
 struct tripletMask {
@@ -52,6 +53,10 @@ private:
 
 #ifdef USE_LOCKED_CANDIDATES
 	int lockedDone;
+#endif
+
+#ifdef USE_SUBSETS
+	int subsetsDone;
 #endif
 
 	//bits to clear when solving particular digit and cell, including the houses at bits 81+
@@ -103,7 +108,7 @@ private:
 	//void findBiValueCell(int& digit, int& cell, int& digit2) const;
 	void findBiValueCells(bm128& bivalues) const;
 
-	void findBiPositionDigit(int& digit, int& cell) const;
+	//void findBiPositionDigit(int& digit, int& cell) const;
 
 public:
 	//solver's entry points

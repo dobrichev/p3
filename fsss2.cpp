@@ -1,5 +1,4 @@
 /*
- * fsss2.cpp
  *
  *  Created on: May 13, 2014
  *      Author: Mladen Dobrichev
@@ -11,10 +10,16 @@
 #include <memory.h>
 #include "fsss2.h"
 
+//#define COUNT_TRIALS
+
 //game mode flags
 #define MODE_SOLVING			0	//unused, keep solving
 #define MODE_STOP_PROCESSING	1	//solved or error
 #define MODE_STOP_GUESSING		2	//necessary solutions found
+
+#ifdef COUNT_TRIALS
+extern int nTrials;
+#endif
 
 //only first 81 bits set
 const t_128 fsss2::mask81 = {0xFFFFFFFFFFFFFFFF,0x0001FFFF};
@@ -364,11 +369,13 @@ unsigned long long fsss2::solve(const char* const in, const unsigned long long n
 	numSolutionsToDo = nSolutions;
 	//perform optimized setup with the initial givens
 	for(int c = 0; c < 81; c++) {
+		//int d = in[80 - c]; //<<<<<<<<<<<< reverse the cells
 		int d = in[c];
 		if(d == 0) {
 			//skip non-givens
 			continue;
 		}
+		//d = 10 - d; // <<<<<<<<<<<< reverse the digit
 		if(!grid[--d].isBitSet(c)) {
 			//direct contradiction within the initial givens
 			mode = MODE_STOP_PROCESSING;
@@ -440,16 +447,21 @@ void fsss2::initEmpty() {
 	knownNoLockedCandidates[8] = mask108;
 	lockedDone = 0;
 #endif
+#ifdef USE_SUBSETS
+	subsetsDone = 0;
+#endif //USE_SUBSETS
 	mode = 0; //should solve
 	guessDepth = 0; //no guessed cells yet
 }
 
 #ifdef USE_LOCKED_CANDIDATES
 void fsss2::doLockedCandidatesForDigit(bm128& tmp) {
-	//int houses = 0x03FFFF & ((tmp.toInt64_1()) >> (81 - 64));
-	//for (int hbm = houses & -houses; houses; hbm = houses & -houses) {
 	for(uint32_t houses = 0x03FFFF & ((tmp.toInt64_1()) >> (81 - 64)); houses; houses &= (houses - 1)) {
+#ifdef   _MSC_VER
+		unsigned int rc = 3U * bm128::FindLSBIndex32(houses); //unsolved row or column
+#else
 		unsigned int rc = 3U * __builtin_ctz(houses); //unsolved row or column
+#endif
 		//process the 3 triplets in the row/col
 		for(unsigned int t = 0; t < 3; t++) {
 			bool dl = tmp.isDisjoint(tripletMasks[rc + t].adjacentLine);
@@ -473,13 +485,22 @@ void fsss2::doLockedCandidatesForDigit(bm128& tmp) {
 }
 #endif
 
-//extern int nNaked[129];
-//void fsss2::doNakedSingles(bm128& g0, bm128& g1, bm128& g2, bm128& g3, bm128& g4, bm128& g5, bm128& g6, bm128& g7, bm128& g8, bm128& slv) { //cells with only one remaining candidate
 void fsss2::doNakedSingles() { //cells with only one remaining candidate
 //    __asm__
 //    (
 //			"":::"%xmm0","%xmm1","%xmm2","%xmm3","%xmm4","%xmm5","%xmm6","%xmm7","%xmm8","%xmm9","%xmm10","%xmm11","%xmm12","xmm13","xmm14","xmm15"
 //    );
+
+//	grid[0].clearBits(solved); //this is postponed to the exit of this process
+//	grid[1].clearBits(solved);
+//	grid[2].clearBits(solved);
+//	grid[3].clearBits(solved);
+//	grid[4].clearBits(solved);
+//	grid[5].clearBits(solved);
+//	grid[6].clearBits(solved);
+//	grid[7].clearBits(solved);
+//	grid[8].clearBits(solved);
+
     bm128& slv = solved;
 //#define slv solved
 #if 1
@@ -509,124 +530,135 @@ void fsss2::doNakedSingles() { //cells with only one remaining candidate
 	//char* const s = sol;
 #define s sol
 
-againNaked:
-	//__builtin_prefetch(grid);
-	register bm128 all = slv;
-	{
-		register bm128 duplicates = slv; //cells with 2 or more candidates
-		{bm128 tmp = g0; tmp &= all; duplicates |= tmp; all |= g0;}
-		{bm128 tmp = g1; tmp &= all; duplicates |= tmp; all |= g1;}
-		{bm128 tmp = g2; tmp &= all; duplicates |= tmp; all |= g2;}
-		{bm128 tmp = g3; tmp &= all; duplicates |= tmp; all |= g3;}
-		{bm128 tmp = g4; tmp &= all; duplicates |= tmp; all |= g4;}
-		{bm128 tmp = g5; tmp &= all; duplicates |= tmp; all |= g5;}
-		{bm128 tmp = g6; tmp &= all; duplicates |= tmp; all |= g6;}
-		{bm128 tmp = g7; tmp &= all; duplicates |= tmp; all |= g7;}
-		{bm128 tmp = g8; tmp &= all; duplicates |= tmp; all |= g8;}
-		if(((bm128)mask81).isSubsetOf(all)) {
-			;
+//againNaked:
+	do {
+		//__builtin_prefetch(grid);
+		register bm128 all = slv;
+		{
+			register bm128 duplicates = slv; //cells with 2 or more candidates
+			{bm128 tmp = g0; tmp &= all; duplicates |= tmp; all |= g0;}
+			{bm128 tmp = g1; tmp &= all; duplicates |= tmp; all |= g1;}
+			{bm128 tmp = g2; tmp &= all; duplicates |= tmp; all |= g2;}
+			{bm128 tmp = g3; tmp &= all; duplicates |= tmp; all |= g3;}
+			{bm128 tmp = g4; tmp &= all; duplicates |= tmp; all |= g4;}
+			{bm128 tmp = g5; tmp &= all; duplicates |= tmp; all |= g5;}
+			{bm128 tmp = g6; tmp &= all; duplicates |= tmp; all |= g6;}
+			{bm128 tmp = g7; tmp &= all; duplicates |= tmp; all |= g7;}
+			{bm128 tmp = g8; tmp &= all; duplicates |= tmp; all |= g8;}
+			if(((bm128)mask81).isSubsetOf(all)) {
+				;
+			}
+			else {
+				//there is at least one unsolved cell without any candidate
+				mode = MODE_STOP_PROCESSING;
+				return;
+			}
+			if(((bm128)mask81).isSubsetOf(duplicates)) {
+				//sorry, no naked singles
+				//remove all candidates for the solved cells (even if no eliminations were made here)
+				g0.clearBits(slv);
+				g1.clearBits(slv);
+				g2.clearBits(slv);
+				g3.clearBits(slv);
+				g4.clearBits(slv);
+				g5.clearBits(slv);
+				g6.clearBits(slv);
+				g7.clearBits(slv);
+				g8.clearBits(slv);
+				grid[0] = g0;
+				grid[1] = g1;
+				grid[2] = g2;
+				grid[3] = g3;
+				grid[4] = g4;
+				grid[5] = g5;
+				grid[6] = g6;
+				grid[7] = g7;
+				grid[8] = g8;
+				return;
+			}
+			all = mask81;
+			all.clearBits(duplicates);
+			slv |= all; //mark cells as solved
 		}
-		else {
-			//there is at least one unsolved cell without any candidate
+		//now find which unique where came from
+		for(uint64_t cells = all.toInt64(); cells; cells &= (cells - 1)) {
+			uint64_t cell = bm128::FindLSBIndex64(cells); //get the rightmost bit index
+//	#ifdef   _MSC_VER
+//			_mm_prefetch((const char*)(bitSet + cell), _MM_HINT_T1);
+//	#else
+//			__builtin_prefetch(bitSet + cell);
+//	#endif
+			const bm128 theCells = visibleCells[cell];
+			const bm128 theBit = bitSet[cell];
+
+			if(s) {
+				if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); s[cell] = 1; continue;}
+				if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); s[cell] = 2; continue;}
+				if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); s[cell] = 3; continue;}
+				if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); s[cell] = 4; continue;}
+				if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); s[cell] = 5; continue;}
+				if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); s[cell] = 6; continue;}
+				if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); s[cell] = 7; continue;}
+				if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); s[cell] = 8; continue;}
+				if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); s[cell] = 9; continue;}
+			}
+			else {
+				if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); continue;}
+			}
+			//this cell has been just cleared by setting other naked single (2 naked in a house for the same digit)
+			//now this cell has no candidates which is a contradiction
 			mode = MODE_STOP_PROCESSING;
 			return;
-		}
-		if(((bm128)mask81).isSubsetOf(duplicates)) {
-			//sorry, no naked singles
-			//remove all candidates for the solved cells (even if no eliminations were made here)
-			g0.clearBits(slv);
-			g1.clearBits(slv);
-			g2.clearBits(slv);
-			g3.clearBits(slv);
-			g4.clearBits(slv);
-			g5.clearBits(slv);
-			g6.clearBits(slv);
-			g7.clearBits(slv);
-			g8.clearBits(slv);
-			grid[0] = g0;
-			grid[1] = g1;
-			grid[2] = g2;
-			grid[3] = g3;
-			grid[4] = g4;
-			grid[5] = g5;
-			grid[6] = g6;
-			grid[7] = g7;
-			grid[8] = g8;
+		} //for lower 64 cells
+		for(uint32_t cells = all.toInt32_2(); cells; cells &= (cells - 1)) {
+			unsigned int cell = 64 + bm128::FindLSBIndex32(cells); //get the rightmost bit index
+//	#ifdef   _MSC_VER
+//			_mm_prefetch((const char*)(bitSet + cell), _MM_HINT_T1);
+//	#else
+//			__builtin_prefetch(bitSet + cell);
+//	#endif
+			const bm128 theCells = visibleCells[cell];
+			const bm128 theBit = bitSet[cell];
+			if(s) {
+				if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); s[cell] = 1; continue;}
+				if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); s[cell] = 2; continue;}
+				if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); s[cell] = 3; continue;}
+				if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); s[cell] = 4; continue;}
+				if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); s[cell] = 5; continue;}
+				if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); s[cell] = 6; continue;}
+				if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); s[cell] = 7; continue;}
+				if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); s[cell] = 8; continue;}
+				if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); s[cell] = 9; continue;}
+			}
+			else {
+				if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); continue;}
+				if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); continue;}
+			}
+			//this cell has been just cleared by setting other naked single (2 naked in a house for the same digit)
+			//now this cell has no candidates which is a contradiction
+			mode = MODE_STOP_PROCESSING;
 			return;
-		}
-		all = mask81;
-		all.clearBits(duplicates);
-		slv |= all; //mark cells as solved
-	}
-	//now find which unique where came from
-	for(uint64_t cells = all.toInt64(); cells; cells &= (cells - 1)) {
-		uint64_t cell = bm128::FindLSBIndex64(cells); //get the rightmost bit index
-		__builtin_prefetch(bitSet + cell);
-		const bm128 theCells = visibleCells[cell];
-		const bm128 theBit = bitSet[cell];
-		if(s) {
-			if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); s[cell] = 1; continue;}
-			if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); s[cell] = 2; continue;}
-			if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); s[cell] = 3; continue;}
-			if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); s[cell] = 4; continue;}
-			if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); s[cell] = 5; continue;}
-			if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); s[cell] = 6; continue;}
-			if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); s[cell] = 7; continue;}
-			if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); s[cell] = 8; continue;}
-			if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); s[cell] = 9; continue;}
-		}
-		else {
-			if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); continue;}
-		}
-		//this cell has been just cleared by setting other naked single (2 naked in a house for the same digit)
-		//now this cell has no candidates which is a contradiction
-		mode = MODE_STOP_PROCESSING;
-		return;
-	} //for lower 64 cells
-	for(uint32_t cells = all.toInt32_2(); cells; cells &= (cells - 1)) {
-		unsigned int cell = 64 + bm128::FindLSBIndex32(cells); //get the rightmost bit index
-		__builtin_prefetch(bitSet + cell);
-		const bm128 theCells = visibleCells[cell];
-		const bm128 theBit = bitSet[cell];
-		if(s) {
-			if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); s[cell] = 1; continue;}
-			if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); s[cell] = 2; continue;}
-			if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); s[cell] = 3; continue;}
-			if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); s[cell] = 4; continue;}
-			if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); s[cell] = 5; continue;}
-			if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); s[cell] = 6; continue;}
-			if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); s[cell] = 7; continue;}
-			if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); s[cell] = 8; continue;}
-			if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); s[cell] = 9; continue;}
-		}
-		else {
-			if(!theBit.isSubsetOf(g0)) ; else {g0.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g1)) ; else {g1.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g2)) ; else {g2.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g3)) ; else {g3.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g4)) ; else {g4.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g5)) ; else {g5.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g6)) ; else {g6.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g7)) ; else {g7.clearBits(theCells); continue;}
-			if(!theBit.isSubsetOf(g8)) ; else {g8.clearBits(theCells); continue;}
-		}
-		//this cell has been just cleared by setting other naked single (2 naked in a house for the same digit)
-		//now this cell has no candidates which is a contradiction
-		mode = MODE_STOP_PROCESSING;
-		return;
-	} //for upper 17 cells
-	if(!((bm128)mask81).isSubsetOf(slv)) {
-		//changed = true;
-		goto againNaked;
-	}
+		} //for upper 17 cells
+	//	if(!((bm128)mask81).isSubsetOf(slv)) {
+	//		//changed = true;
+	//		goto againNaked;
+	//	}
+	} while(!((bm128)mask81).isSubsetOf(slv));
 	//finally all 81 cells are solved
 	solutionFound();
 	return;
@@ -661,27 +693,67 @@ nakedAgain:
 					continue;
 				}
 				againSameHidden:
+
+//				{
+//					uint32_t hh = ((1 << 27) - 1) & ((grid[d].toInt64_1()) >> (81 - 64));
+//					//int hh = __builtin_popcountll(((1 << 27) - 1) & ((grid[d].toInt64_1()) >> (81 - 64)));
+//					if(__builtin_popcount(hh) == 3) {
+//						//we know the hidden single is located on the intersection of the row/col/box (or there is a contradiction)
+//						if((hh & ((1 << 9) - 1)) == 0) printf("r");
+//						if(((hh >> 9) & ((1 << 9) - 1)) == 0) printf("c");
+//						//int r = bm128::FindLSBIndex32(hh & ((1 << 9) - 1));
+//						int r = bm128::FindLSBIndex32(hh);
+//						//int c = bm128::FindLSBIndex32((hh >> 9) & ((1 << 9) - 1));
+//						int c = bm128::FindLSBIndex32(hh >> 9);
+//						int cell = r * 9 + c;
+//
+//						//int b = bm128::FindLSBIndex32((hh >> 18) & ((1 << 9) - 1));
+//						//if(b != (3 * (r / 3) + (c / 3))) printf("."); //there is something wrong (contradiction?)
+//
+//						if(sol)
+//							sol[cell] = d + 1; //store the digit if solution buffer is given
+//						solved.setBit(cell); //mark cell as "solved"
+//
+//						grid[d].clearBits(visibleCells[cell]); //mark visible cells as forbidden for the same digit, mark the 3 houses as solved
+//						//at this point the solved cell still isn't cleared from all 9 masks, but doNakedSingles does it
+//						doNakedSingles(); //checking a single cell, possible eliminations in other digits
+//						if(mode) goto backtrack;
+//						found = d; //if the latest found is in the 1-st digit then repeating search for hiddens is redundant
+//						goto againSameHidden;
+//					}
+//				}
+
+
 				//for each unsolved house
-				for(uint32_t houses = /*((1 << 27) - 1) &*/(grid[d].toInt64_1()) >> (81 - 64); houses; houses &= (houses - 1)) {
+				for(uint64_t houses = /*((1 << 27) - 1) &*/((grid[d].toInt64_1()) >> (81 - 64)); houses; houses &= (houses - 1)) {
+				//for(uint64_t houses =  ((1 << 27) - 1) & ((grid[d].toInt64_1()) >> (81 - 64)); houses; houses &= (houses - 1)) {
+					uint64_t house = bm128::FindLSBIndex64(houses);
+//#ifdef   _MSC_VER
+//					//_mm_prefetch((const char*)(&minus1), _MM_HINT_T1);
+//					_mm_prefetch((const char*)(bitsForHouse + house + 4), _MM_HINT_T1);
+//#else
+//					//__builtin_prefetch(&minus1);
+//					__builtin_prefetch(bitsForHouse + house + 4);
+//#endif
 					bm128 tmp = grid[d];
-					//static const t_128 minus1 = {0xffffffffffffffff,0xffffffffffffffff};
-					//__builtin_prefetch(&minus1);
-					{
-						//unsigned int j = bm128::FindLSBIndex32(houses);
-						//tmp &= bitsForHouse[j]; //mask other candidates and leave only these from the current house
-						tmp &= bitsForHouse[bm128::FindLSBIndex32(houses)]; //mask other candidates and leave only these from the current house
-					}
+					tmp &= bitsForHouse[house]; //mask other candidates and leave only these from the current house
+
+//					bm128 k = knownNoHiddenSingles[d];
+//					k &= bitsForHouse[house];
+//					if(k.isSubsetOf(tmp))
+//						continue; //this affects the number of T&E => unknown features exist (bugs)
+
 					//find whether the house has a single candidate and obtain its position
-					uint64_t cell;
 					//exploit the fact that when (x & (x-1)) == 0 then x has 0 or 1 bits set
-					//static const t_128 minus1 = {0xffffffffffffffff,0xffffffffffffffff};
 					if(0 == _mm_testz_si128(tmp.bitmap128.m128i_m128i, _mm_add_epi64(tmp.bitmap128.m128i_m128i, minus1.m128i_m128i)))
-					//if(0 == tmp.hasMax2Bits())
+					//if(tmp.popcount_128() > 1)
 						continue; //too many candidates
 					//find the bit
+					uint64_t cell;
 					{
 						uint64_t low64 = tmp.toInt64();
 						uint32_t high17 = tmp.toInt32_2();
+						//uint64_t high17 = tmp.toInt64_1();
 						if(low64) {
 							if(high17) continue; //candidates in both low and high part of the house
 							//get the position of the single candidate in the low part of the house
@@ -691,6 +763,7 @@ nakedAgain:
 						if(high17) {
 							//get the position of the single candidate in the high part of the house
 							cell = 64 + bm128::FindLSBIndex32(high17);
+							//cell = 64 + bm128::FindLSBIndex64(high17);
 							goto single_found;
 						}
 					}
@@ -700,6 +773,13 @@ nakedAgain:
 					if(sol)
 						sol[cell] = d + 1; //store the digit if solution buffer is given
 					solved.setBit(cell); //mark cell as "solved"
+
+//					//if not all 3 houses are unsolved, there is contradiction ... but this never happens
+//					tmp = grid[d];
+//					//tmp &= visibleCells[cell]; //the 3 houses
+//					uint64_t allHouses = ((1 << 27) - 1) & ((tmp.toInt64_1()) >> (81 - 64));
+//					if(__builtin_popcountll(allHouses) > 21) printf(".");
+
 					grid[d].clearBits(visibleCells[cell]); //mark visible cells as forbidden for the same digit, mark the 3 houses as solved
 					//at this point the solved cell still isn't cleared from all 9 masks, but doNakedSingles does it
 					doNakedSingles(); //checking a single cell, possible eliminations in other digits
@@ -714,6 +794,7 @@ nakedAgain:
 
 	//locked candidates
 #ifdef USE_LOCKED_CANDIDATES
+	//if(lockedDone < 1) {
 	if(lockedDone == 0) {
 		int found = 0;
 		//if(solved.popcount_128() < 29) {
@@ -733,13 +814,72 @@ nakedAgain:
 			}
 		//}
 		lockedDone = 1;
+		//lockedDone++;
 		if(found) goto nakedAgain;
 	} //end of locked candidates
 #endif //USE_LOCKED_CANDIDATES
 
+#ifdef USE_SUBSETS
+	//subsets
+	if(subsetsDone == 0) {
+	//if(subsetsDone < 1) {
+		bool found = false;
+		for(int d1 = 0; d1 < 8; d1++) {
+			for(int d2 = d1 + 1; d2 < 9; d2++) {
+				bool found2 = false;
+				bm128 ss;
+				ss.clear();
+				bm128 both = grid[d1];
+				both |= grid[d2];
+				//for each unsolved for both digits house
+				for(uint64_t houses = /*((1 << 27) - 1) &*/((grid[d1].toInt64_1()) & (grid[d2].toInt64_1())) >> (81 - 64); houses; houses &= (houses - 1)) {
+					bm128 tmp = both;
+					tmp &= bitsForHouse[bm128::FindLSBIndex64(houses)]; //mask other candidates and leave only these from the current house
+					if(2 == tmp.popcount_128()) {
+						//only 2 digits in 2 cells in same house
+						ss |= tmp;
+						found2 = true;
+						break;
+					}
+				}
+				//eliminate the candidates from other digits
+				if(found2) {
+					for(int d = 0; d < 9; d++) {
+						if((d != d1) && (d != d2)) {
+							if(!grid[d].isDisjoint(ss)) {
+								grid[d].clearBits(ss);
+								found = true;
+								//goto nakedAgain;
+							}
+						}
+					}
+				}
+			}
+		}
+		subsetsDone = 1;
+		//subsetsDone++;
+		if(found) {
+#ifdef USE_LOCKED_CANDIDATES
+			//lockedDone = 0;
+#endif
+			goto nakedAgain;
+		}
+	}
+#endif //USE_SUBSETS
+
 	//Prepare a guess
 	{
 		//At this point the existence of unsolved house(s) w/o candidates crashes the algorithm!!!
+		bm128* gg = &contexts[guessDepth++][0];
+//#ifdef   _MSC_VER
+//		_mm_prefetch((const char*)(&gg[0]), _MM_HINT_T1);
+//		_mm_prefetch((const char*)(&gg[4]), _MM_HINT_T1);
+//		_mm_prefetch((const char*)(&gg[8]), _MM_HINT_T1);
+//#else
+//		__builtin_prefetch(&gg[0]);
+//		__builtin_prefetch(&gg[4]);
+//		__builtin_prefetch(&gg[8]);
+//#endif
 
 		//Find an unsolved cell with less possibilities
 		int optDigit;
@@ -747,16 +887,20 @@ nakedAgain:
 
 		//find first bi-value cell and return first of the two values
 		findBiValueCell(optDigit, optCell);
-		if(optDigit != -1) {
-			;
-		}
-		else {
-			//find house with less candidates from a particular digit, exit on first bi-position house/digit
-			findBiPositionDigit(optDigit, optCell);
-		}
+//		if(optDigit != -1) {
+//			;
+//		}
+//		else {
+//			//find house with less candidates from a particular digit, exit on first bi-position house/digit
+//			findBiPositionDigit(optDigit, optCell);
+//		}
+
+#ifdef COUNT_TRIALS
+		nTrials++;
+#endif
 
 		{
-			bm128* gg = &contexts[guessDepth++][0];
+			//bm128* gg = &contexts[guessDepth++][0];
 //			__builtin_prefetch(&gg[4]);
 //			__builtin_prefetch(&gg[8]);
 			gg[0] = grid[0];
@@ -769,15 +913,6 @@ nakedAgain:
 			gg[7] = grid[7];
 			gg[8] = grid[8];
 			gg[9] = solved;
-//			gg[10] = knownNoLockedCandidates[0];
-//			gg[11] = knownNoLockedCandidates[1];
-//			gg[12] = knownNoLockedCandidates[2];
-//			gg[13] = knownNoLockedCandidates[3];
-//			gg[14] = knownNoLockedCandidates[4];
-//			gg[15] = knownNoLockedCandidates[5];
-//			gg[16] = knownNoLockedCandidates[6];
-//			gg[17] = knownNoLockedCandidates[7];
-//			gg[18] = knownNoLockedCandidates[8];
 			//later continue with this candidate eliminated
 			gg[optDigit].clearBit(optCell);
 			//try the "optimal" cell/digit candidate
@@ -814,61 +949,124 @@ contradiction:
 		grid[7] = gg[7];
 		grid[8] = gg[8];
 		solved = gg[9];
-//		knownNoLockedCandidates[0] = gg[10];
-//	    knownNoLockedCandidates[1] = gg[11];
-//	    knownNoLockedCandidates[2] = gg[12];
-//	    knownNoLockedCandidates[3] = gg[13];
-//	    knownNoLockedCandidates[4] = gg[14];
-//	    knownNoLockedCandidates[5] = gg[15];
-//	    knownNoLockedCandidates[6] = gg[16];
-//	    knownNoLockedCandidates[7] = gg[17];
-//	    knownNoLockedCandidates[8] = gg[18];
 		mode = 0;
 	}
 	goto nakedAgain;
 }
 
-void fsss2::findBiValueCells(bm128& all) const { //cells with 2 remaining candidates
-	//bm128 all;
-	all = solved;
-	bm128 duplicates = solved;
-	bm128 triplicates = solved;
-	for(int d = 0; d < 9; d++) {
-		bm128 tmp = grid[d];
-		tmp &= all;
-		bm128 tmp2 = tmp;
-		tmp2 &= duplicates;
-		triplicates |= tmp2;
-		duplicates |= tmp;
-		all |= grid[d];
-	}
-	all &= mask81; //clear other bits
-	all.clearBits(triplicates);
+//void fsss2::findBiValueCells(bm128& all) const { //cells with 2 remaining candidates
+//	//bm128 all;
+//	all = solved;
+//	bm128 duplicates = solved;
+//	bm128 triplicates = solved;
+//	for(int d = 0; d < 9; d++) {
+//		bm128 tmp = grid[d];
+//		tmp &= all;
+//		bm128 tmp2 = tmp;
+//		tmp2 &= duplicates;
+//		triplicates |= tmp2;
+//		duplicates |= tmp;
+//		all |= grid[d];
+//	}
+//	all &= mask81; //clear other bits
+//	all.clearBits(triplicates);
+//}
+void fsss2::findBiValueCells(bm128& all) const {
+   bm128 sum0 = grid[0];
+
+   bm128 sum1 = grid[1];
+   bm128 tmp = sum0;
+   sum0 ^= sum1;
+   sum1 &= tmp;
+
+   bm128 carry = grid[2];
+   tmp = sum0;
+   sum0 ^= carry;
+   carry &= tmp;
+   sum1 |= carry;
+
+   bm128 sum2 = grid[3];
+   tmp = sum0;
+   sum0 ^= sum2;
+   sum2 &= tmp;
+   tmp = sum1;
+   sum1 ^= sum2;
+   sum2 &= tmp;
+
+   carry = grid[4];
+   tmp = sum0;
+   sum0 ^= carry;
+   carry &= tmp;
+   tmp = sum1;
+   sum1 ^= carry;
+   carry &= tmp;
+   sum2 |= carry;
+
+   carry = grid[5];
+   tmp = sum0;
+   sum0 ^= carry;
+   carry &= tmp;
+   tmp = sum1;
+   sum1 ^= carry;
+   carry &= tmp;
+   sum2 |= carry;
+
+   carry = grid[6];
+   tmp = sum0;
+   sum0 ^= carry;
+   carry &= tmp;
+   tmp = sum1;
+   sum1 ^= carry;
+   carry &= tmp;
+   sum2 |= carry;
+
+   bm128 sum3 = grid[7];
+   tmp = sum0;
+   sum0 ^= sum3;
+   sum3 &= tmp;
+   tmp = sum1;
+   sum1 ^= sum3;
+   sum3 &= tmp;
+   tmp = sum2;
+   sum2 ^= sum3;
+   sum3 &= tmp;
+
+   carry = grid[8];
+   tmp = sum0;
+   sum0 ^= carry;
+   carry &= tmp;
+   tmp = sum1;
+   sum1 ^= carry;
+   carry &= tmp;
+   tmp = sum2;
+   sum2 ^= carry;
+   carry &= tmp;
+   sum3 |= carry;
+
+   all = mask81;
+   all.clearBits(solved);
+
+   if (!all.isSubsetOf(sum3))
+      all.clearBits(sum3);
+   if (!all.isSubsetOf(sum2))
+      all.clearBits(sum2);
+   if (!all.isSubsetOf(sum1))
+      all.clearBits(sum1);
+   if (!all.isSubsetOf(sum0))
+      all.clearBits(sum0);
 }
 
-//inline void fsss2::findBiValueCell(int& digit, int& cell, int& digit2, bm128& all) const { //cells with 2 remaining candidates
 void fsss2::findBiValueCell(int& digit, int& cell) const { //cells with 2 remaining candidates
-//inline void fsss2::findBiValueCell(int& digit, int& cell, int& digit2) const { //cells with 2 remaining candidates
 	bm128 all;
 	findBiValueCells(all);
-	if(all.isZero()) {
-		digit = -1;
-		return;
-	}
-//	for(int d = 0; d < 8; d++) {
-//		if(!all.isDisjoint(grid[d])) {
-//			all &= grid[d];
-//			cell = all.getFirstBit1Index96();
-//			digit = d;
-//			for(int d2 = d + 1; d2 < 9; d2++) {
-//				if(grid[d2].isBitSet(cell)) {
-//					digit2 = d2;
-//					return;
-//				}
-//			}
-//		}
+
+//	if(all.isZero()) {
+//		digit = -1;
+//		return;
 //	}
+
 	for(digit = 0; digit < 8; digit++) {
+	//for(digit = 8; digit >= 0; digit--) {
 		if(!all.isDisjoint(grid[digit])) {
 			all &= grid[digit];
 			cell = all.getFirstBit1Index96();
@@ -876,6 +1074,7 @@ void fsss2::findBiValueCell(int& digit, int& cell) const { //cells with 2 remain
 		}
 	}
 }
+
 //	//debug
 //	char p[88];
 //	p[81] = 0;
@@ -889,28 +1088,29 @@ void fsss2::findBiValueCell(int& digit, int& cell) const { //cells with 2 remain
 //	printf("\n%s\n", p);
 //	printf("*********\n");
 
-void fsss2::findBiPositionDigit(int& digit, int& cell) const {
-	//find house with less candidates from a particular digit, exit on first bi-position house/digit
-	int minCells = 100;
-	for(int d = 0; d < 9; d++) {
-		for(int h = 0; h < 27; h++) {
-			if(!grid[d].isBitSet(81 + h))
-				continue;
-			bm128 tmp = grid[d];
-			tmp &= bitsForHouse[h];
-			tmp &= mask81;
-			int n = tmp.popcount_128();
-			if(n < minCells) {
-				cell = tmp.getFirstBit1Index96();
-				digit = d;
-				if(n == 2) {
-					return; //not so bad, a bi-position is found
-				}
-				minCells = n;
-			}
-		}
-	}
-	//for(int i = 0; i < 81; i++)
-	//	printf("%c", puzzle[i] + '0');
-	//printf("\t%d\n", minCells);
-}
+//void fsss2::findBiPositionDigit(int& digit, int& cell) const {
+//	//find house with less candidates from a particular digit, exit on first bi-position house/digit
+//	int minCells = 100;
+//	bm128 bestHouse;
+//	for(int d = 0; d < 9; d++) {
+//		//for each unsolved house
+//		for(uint32_t houses = /*((1 << 27) - 1) &*/(grid[d].toInt64_1()) >> (81 - 64); houses; houses &= (houses - 1)) {
+//			bm128 tmp = grid[d];
+//			tmp &= bitsForHouse[bm128::FindLSBIndex32(houses)];
+//			int n = tmp.popcount_128();
+//			if(n < minCells) {
+//				digit = d;
+//				if(n == 2) {
+//					cell = tmp.getFirstBit1Index96();
+//					return; //not so bad, a bi-position is found
+//				}
+//				bestHouse = tmp;
+//				minCells = n;
+//			}
+//		}
+//		cell = bestHouse.getFirstBit1Index96();
+//	}
+//	//for(int i = 0; i < 81; i++)
+//	//	printf("%c", puzzle[i] + '0');
+//	//printf("\t%d\n", minCells);
+//}
